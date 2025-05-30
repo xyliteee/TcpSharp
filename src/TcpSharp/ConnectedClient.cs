@@ -63,6 +63,8 @@ public class ConnectedClient
                     });
                 }
             }
+            // If we exit the loop, it means the client has closed the connection
+            this._server.Disconnect(this.ConnectionId, DisconnectReason.None);
         }
         catch (IOException ex)
         {
