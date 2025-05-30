@@ -428,6 +428,12 @@ public class TcpSharpSocketClient
         {
             while (!_cancellationToken.IsCancellationRequested)
             {
+                if (_socket.Poll(1000, SelectMode.SelectRead) && _socket.Available == 0)
+                {
+                    // Connection has been closed, this likely means the server closed the connection. We call Disconnect to clean up and notify the client.
+                    Disconnect(DisconnectReason.None);
+                    return;
+                }
                 // Receive the response from the remote device.    
                 var bytesCount = _socket.Receive(_recvBuffer);
                 if (bytesCount > 0)
@@ -473,6 +479,11 @@ public class TcpSharpSocketClient
 
     private void Disconnect(DisconnectReason reason)
     {
+        // If already disconnected, no need to do this again.
+        if (!Connected) 
+        {
+            return;
+        }
         try
         {
             // Stop Receiver Task
@@ -494,7 +505,6 @@ public class TcpSharpSocketClient
             _socket.Dispose();
         }
         catch { }
-
         // Invoke OnDisconnected
         this.InvokeOnDisconnected(new OnClientDisconnectedEventArgs());
 
