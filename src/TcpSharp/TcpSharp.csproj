@@ -6,28 +6,34 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<PackageId>TcpSharp</PackageId>
-		<Authors>Burak Öner</Authors>
-		<Version>1.3.6</Version>
-		<FileVersion>1.3.6</FileVersion>
-		<PackageVersion>1.3.6</PackageVersion>
-		<AssemblyVersion>1.3.6</AssemblyVersion>
-		<Description>Faster TCP Server and Client tools using low-level implementations. Successfully tested up to 10GBps.</Description>
+		<PackageId>Xyli.TcpSharp</PackageId>
+		<Authors>Xyliteee</Authors>
+		<FileVersion>1.3.7</FileVersion>
+		<PackageVersion>1.3.7</PackageVersion>
+		<AssemblyVersion>1.3.7</AssemblyVersion>
+		<Description>This package is an updated version of TcpSharp, originally developed by burakoner.</Description>
 		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
 		<PackageTags>TcpSharp;Net;TCP;Socket;Client;Server</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<NeutralLanguage>en</NeutralLanguage>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageReleaseNotes>
-			Version 1.3.6 - 08 Mar 2024
+			Version 1.3.7 - 21 Mar 2025
 		</PackageReleaseNotes>
 		<PackageIcon>TcpSharp.png</PackageIcon>
 		<PackageIconUrl />
-		<PackageProjectUrl>https://github.com/burakoner/TcpSharp</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/burakoner/TcpSharp</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/xyliteee/TcpSharp</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/xyliteee/TcpSharp</RepositoryUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<Title>Xyli.TcpSharp</Title>
+		<Version>1.3.7</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Include="..\..\..\..\..\Downloads\README.md">
+		  <Pack>True</Pack>
+		  <PackagePath>\</PackagePath>
+		</None>
 		<None Include="TcpSharp.png" Pack="True" PackagePath="" />
 	</ItemGroup>
 
