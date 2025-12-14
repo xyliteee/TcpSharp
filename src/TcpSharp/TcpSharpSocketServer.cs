@@ -685,8 +685,8 @@ public class TcpSharpSocketServer<TPacketStruct>
     public async Task<long> SendPacketAsync(string connectionId, TPacketStruct packet, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
-        return SendPacket(connectionId, packet);
+        var client = GetClient(connectionId);
+        return await client.SendPacketAsync(packet, token);
     }
 
     public void Disconnect(string connectionId, DisconnectReason reason = DisconnectReason.None)

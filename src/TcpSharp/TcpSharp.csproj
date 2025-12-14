@@ -37,8 +37,4 @@
 		<None Include="README.md" Pack="True" PackagePath="" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="Modules\" />
-	</ItemGroup>
-
 </Project>

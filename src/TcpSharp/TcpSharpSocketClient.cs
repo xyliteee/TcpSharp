@@ -1,4 +1,6 @@
-﻿using TcpSharp.Interface;
+﻿using System.Net.Sockets;
+using TcpSharp.Interface;
+using TcpSharp.Modules;
 
 namespace TcpSharp;
 public class TcpSharpSocketClient
@@ -302,6 +304,54 @@ public class TcpSharpSocketClient
         });
     }
 
+    public async Task ConnectAsync()
+    {
+        _recvBuffer = new byte[ReceiveBufferSize];
+        _sendBuffer = new byte[SendBufferSize];
+
+        IPAddress[] addresses;
+        if (IPAddress.TryParse(Host, out IPAddress ip))
+        {
+            addresses = new[] { ip };
+        }
+        else
+        {
+            addresses = await Dns.GetHostAddressesAsync(Host).ConfigureAwait(false);
+            if (addresses.Length == 0)
+                throw new Exception("Unable to resolve host address");
+            if (addresses[0].ToString() == "::1")
+                addresses[0] = new IPAddress(16777343L);
+        }
+
+        _socket = new Socket(addresses[0].AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = NoDelay,
+            ReceiveBufferSize = ReceiveBufferSize,
+            ReceiveTimeout = ReceiveTimeout,
+            SendBufferSize = SendBufferSize,
+            SendTimeout = SendTimeout
+        };
+
+        if (KeepAlive && KeepAliveInterval > 0)
+            _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+
+        await _socket.ConnectAsync(addresses, Port).ConfigureAwait(false);
+
+        if (_cancellationTokenSource != null)
+            _cancellationTokenSource.Cancel();
+
+        _cancellationTokenSource = new CancellationTokenSource();
+        _cancellationToken = _cancellationTokenSource.Token;
+
+        _ = Task.Factory.StartNew(ReceiverTask, TaskCreationOptions.LongRunning);
+
+        InvokeOnConnected(new OnClientConnectedEventArgs
+        {
+            ServerHost = Host,
+            ServerPort = Port
+        });
+    }
+
     public void Disconnect()
     {
         this.Disconnect(DisconnectReason.None);
@@ -322,10 +372,40 @@ public class TcpSharpSocketClient
 
     public async Task<long> SendBytesAsync(byte[] bytes, CancellationToken token)
     {
-        token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
+        if (!this.Connected) return 0;
+        if (bytes.Length == 0) return 0;
 
-        return SendBytes(bytes);
+        var args = new SocketAsyncEventArgs
+        {
+            BufferList = [new ArraySegment<byte>(bytes)]
+        };
+
+        if (this._socket.SendAsync(args))
+        {
+            using (token.Register(() => args.Dispose(), useSynchronizationContext: false))
+            {
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                void Handler(object s, SocketAsyncEventArgs e) => tcs.TrySetResult(e.SocketError == SocketError.Success);
+                args.Completed += Handler;
+                try
+                {
+                    await tcs.Task.ConfigureAwait(false);
+                }
+                finally
+                {
+                    args.Completed -= Handler;
+                }
+            }
+        }
+
+        if (args.SocketError != SocketError.Success)
+        {
+            throw new SocketException((int)args.SocketError);
+        }
+
+        long sent = args.BytesTransferred;
+        this.BytesSent += sent;
+        return sent;
     }
 
     public long SendString(string data)
@@ -345,9 +425,7 @@ public class TcpSharpSocketClient
     public async Task<long> SendStringAsync(string data, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
-
-        return SendString(data);
+        return await SendBytesAsync(Encoding.UTF8.GetBytes(data), token);
     }
 
     public long SendString(string data, Encoding encoding)
@@ -367,9 +445,7 @@ public class TcpSharpSocketClient
     public async Task<long> SendStringAsync(string data, Encoding encoding, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
-
-        return SendString(data, encoding);
+        return await SendBytesAsync(encoding.GetBytes(data), token);
     }
 
     public long SendFile(string fileName)
@@ -392,10 +468,30 @@ public class TcpSharpSocketClient
 
     public async Task<long> SendFileAsync(string fileName, CancellationToken token)
     {
-        token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
+        if (!Connected) return 0;
+        if (!File.Exists(fileName)) return 0;
 
-        return SendFile(fileName);
+        long fileLen;
+        byte[] payload;
+
+        using (var fs = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read,
+                                       bufferSize: 4096, FileOptions.Asynchronous))
+        {
+            fileLen = fs.Length;
+            payload = new byte[fileLen];
+            int offset = 0;
+            int read;
+            while (offset < payload.Length &&
+                   (read = await fs.ReadAsync(payload, offset, payload.Length - offset, token)
+                                 .ConfigureAwait(false)) > 0)
+            {
+                offset += read;
+            }
+        }
+
+        await SendBytesAsync(payload, token).ConfigureAwait(false);
+        BytesSent += fileLen;
+        return fileLen;
     }
 
     public long SendFile(string fileName, byte[] preBuffer, byte[] postBuffer, TransmitFileOptions flags)
@@ -829,6 +925,54 @@ public class TcpSharpSocketClient<TPacketStruct>
         });
     }
 
+    public async Task ConnectAsync()
+    {
+        _recvBuffer = new byte[ReceiveBufferSize];
+        _sendBuffer = new byte[SendBufferSize];
+
+        IPAddress[] addresses;
+        if (IPAddress.TryParse(Host, out IPAddress ip))
+        {
+            addresses = new[] { ip };
+        }
+        else
+        {
+            addresses = await Dns.GetHostAddressesAsync(Host).ConfigureAwait(false);
+            if (addresses.Length == 0)
+                throw new Exception("Unable to resolve host address");
+            if (addresses[0].ToString() == "::1")
+                addresses[0] = new IPAddress(16777343L);
+        }
+
+        _socket = new Socket(addresses[0].AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = NoDelay,
+            ReceiveBufferSize = ReceiveBufferSize,
+            ReceiveTimeout = ReceiveTimeout,
+            SendBufferSize = SendBufferSize,
+            SendTimeout = SendTimeout
+        };
+
+        if (KeepAlive && KeepAliveInterval > 0)
+            _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+
+        await _socket.ConnectAsync(addresses, Port).ConfigureAwait(false);
+
+        if (_cancellationTokenSource != null)
+            _cancellationTokenSource.Cancel();
+
+        _cancellationTokenSource = new CancellationTokenSource();
+        _cancellationToken = _cancellationTokenSource.Token;
+
+        _ = Task.Factory.StartNew(ReceiverTask, TaskCreationOptions.LongRunning);
+
+        InvokeOnConnected(new OnClientConnectedEventArgs
+        {
+            ServerHost = Host,
+            ServerPort = Port
+        });
+    }
+
     public void Disconnect()
     {
         this.Disconnect(DisconnectReason.None);
@@ -842,12 +986,52 @@ public class TcpSharpSocketClient<TPacketStruct>
         this.BytesSent += sent;
         return sent;
     }
-
-    public async Task<long> SendPacketAsync(TPacketStruct packet,CancellationToken token)
+    public async Task<long> SendPacketAsync(TPacketStruct packet, CancellationToken token)
     {
-        token.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
-        return SendPacket(packet);
+        if (!Connected) return 0;
+
+        byte[] raw = _packetController.Serialize(packet);
+        if (raw.Length == 0) return 0;
+
+        byte[] buffer = raw;
+        bool rented = false;
+        if (raw.Length <= BufferPool.POOL_SIZE)
+        {
+            buffer = BufferPool.Rent();
+            rented = true;
+            Buffer.BlockCopy(raw, 0, buffer, 0, raw.Length);
+        }
+
+        long sent;
+        try
+        {
+            var seg = new ArraySegment<byte>(buffer, 0, raw.Length);
+            var args = new SocketAsyncEventArgs();
+            args.SetBuffer(seg.Array, seg.Offset, seg.Count);
+
+            if (_socket.SendAsync(args))
+            {
+                using (token.Register(args.Dispose, useSynchronizationContext: false))
+                {
+                    var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    void Handler(object s, SocketAsyncEventArgs e) => tcs.TrySetResult(e.SocketError == SocketError.Success);
+                    args.Completed += Handler;
+                    try { await tcs.Task.ConfigureAwait(false); }
+                    finally { args.Completed -= Handler; }
+                }
+            }
+
+            if (args.SocketError != SocketError.Success)
+                throw new SocketException((int)args.SocketError);
+
+            sent = args.BytesTransferred;
+            BytesSent += sent;
+        }
+        finally
+        {
+            if (rented) BufferPool.Return(buffer);
+        }
+        return sent;
     }
 
 

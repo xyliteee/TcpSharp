@@ -1,4 +1,6 @@
-﻿namespace TcpSharp;
+﻿using System.Net.Sockets;
+
+namespace TcpSharp;
 
 public class ConnectedClient
 {
@@ -256,5 +258,15 @@ public class ConnectedClient<TPacketStruct>
     public long SendPacket(TPacketStruct packet)
     {
         return !this.Connected ? 0 : this.Client.Client.Send(_server.PacketController.Serialize(packet));
+    }
+
+    public async Task<long> SendPacketAsync(TPacketStruct packet, CancellationToken token = default)
+    {
+        if (!this.Connected) return 0;
+        byte[] payload = _server.PacketController.Serialize(packet);
+        if (payload.Length == 0) return 0;
+        await this.Client.GetStream().WriteAsync(payload, 0, payload.Length, token).ConfigureAwait(false);
+        this.BytesSent += payload.Length;
+        return payload.Length;
     }
 }
